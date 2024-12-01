@@ -1,7 +1,7 @@
 import streamlit as st
 import speech_recognition as sr
-import sounddevice as sd
-from scipy.io.wavfile import write
+import pyaudio
+import wave
 from fpdf import FPDF
 import os
 from langchain import HuggingFaceHub
@@ -10,6 +10,7 @@ from langchain import PromptTemplate
 from langchain import LLMChain
 
 huggingface_api_token = os.getenv("HUGGINGFACEHU_API_TOKEN")
+
 def clean_text(text):
     replacements = {
         "\u2018": "'",
@@ -22,12 +23,40 @@ def clean_text(text):
     for original, replacement in replacements.items():
         text = text.replace(original, replacement)
     return text
-def recording(duration, samplerate=44100):
+
+# Recording using pyaudio
+def recording(duration, samplerate=44100, channels=1, output_file="temp_audio.wav"):
     st.write(f"Recording for {duration} seconds...")
-    data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
-    sd.wait()  # Wait for the recording to finish
+    
+    p = pyaudio.PyAudio()
+    
+    # Open a stream to record audio
+    stream = p.open(format=pyaudio.paInt16,
+                    channels=channels,
+                    rate=samplerate,
+                    input=True,
+                    frames_per_buffer=1024)
+    
+    frames = []
+    for _ in range(0, int(samplerate / 1024 * duration)):
+        data = stream.read(1024)
+        frames.append(data)
+    
+    # Close the stream
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+    
+    # Save audio data to a .wav file
+    with wave.open(output_file, 'wb') as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(p.get_sample_size(pyaudio.paInt16))
+        wf.setframerate(samplerate)
+        wf.writeframes(b''.join(frames))
+    
     st.write("Recording completed!")
-    return data
+    return output_file
+
 # Convert audio to text
 def audiototext(inputfile):
     recognizer = sr.Recognizer()
@@ -75,14 +104,10 @@ def main():
 
     # Recording the audio
     if record_button:
-        audio_data = recording(duration)
-
-        # Saving the recorded audio as a .wav file
-        output_audio_file ="temp_audio.wav"
-        write(output_audio_file, 44100, audio_data)
+        audio_file = recording(duration)
 
         # Convert audio to text
-        writtentext = audiototext(output_audio_file)
+        writtentext = audiototext(audio_file)
         summary = clean_text(writtentext)
 
         st.subheader("Summarized Text:")
