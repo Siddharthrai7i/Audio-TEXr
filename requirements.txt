@@ -1,8 +1,7 @@
 streamlit
 speechrecognition
-sounddevice
+pyaudio
 scipy
 fpdf
 langchain
 langchain-community
-transformers
